@@ -1,0 +1,23 @@
+sweeper:
+  params:
+    run_name: hyperparameter_search_basic
+
+    # repeats: 0,1,2,3,4,5
+
+    # model.backbone: mit_b3, mit_b2, mit_b1, mit_b0
+    # model.backbone: mit_b2, mit_b0
+    model.backbone: mit_b4
+
+
+
+    # optimization.optimizer.name: adam, adamw, sgd 
+    optimization.optimizer.name: adamw
+
+    optimization.learning_rate: 1e-2, 1e-3, 1e-4, 1e-5
+    optimization.weight_decay: 1e-2, 1e-3, 1e-4, 1e-5, 1e-6
+
+    # dataset.dataset_name: stb_seg_v5-r1, stb_seg_v1-r1 #, stb_seg_v6-r1 # TODO this needs to be exported first
+    dataset.dataset_name: stb_seg_v6-r1, stb_seg_v5-r1, stb_seg_v1-r1
+
+    data_augmentation: downscaling_half
+

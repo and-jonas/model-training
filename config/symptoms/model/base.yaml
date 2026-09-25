@@ -1,3 +1,3 @@
 head: fpn
-backbone: mit_b2
+backbone: mit_b3
 n_classes: 5

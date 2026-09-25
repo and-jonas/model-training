@@ -1,12 +1,12 @@
 optimizer: 
   name: adam
   
-epochs: 50
+epochs: 10
 device: 0
 learning_rate: 1e-3
 weight_decay: 0
 strategy: freeze
-n_workers: 8
+n_workers: 0
 
 batchsize: 8
 minibatch_size: 4

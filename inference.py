@@ -22,7 +22,8 @@ IMG_PATH = Path(
     "iter2/dataset_src/segmentations_export/data"
 )
 
-OUTPUT_DIR = Path("./evaluation_torchscript/predictions")
+OUTPUT_DIR = Path("/agroscope/Data-Work-CH/22_Plant_Production-CH/"
+    "224_Digitalisation/Jonas_Anderegg_Files/E_Work/91_DL/03_CANOPY_PROXIMAL_SYMPTOMS/predictions")
 
 AUGMENTATION_CONFIG_PATH = (
     "config/symptoms/data_augmentation/base.yaml"

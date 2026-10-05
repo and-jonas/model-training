@@ -1,4 +1,7 @@
 /conda_env
 /loggers
 /Depth-Anything-V2
+/models
+__pycache__/
+/.venv
 

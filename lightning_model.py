@@ -14,10 +14,14 @@ class SegmentationModel(pl.LightningModule):
         self,
         learning_rate,
         weight_decay,
-        class_weights,
-        num_classes=5,
+        strategy, 
+        num_classes,
+        class_names,
+        metric_classes,
+        class_weights=None,
         encoder_name="mit_b3",
-        encoder_weights_path="/scratch0/f89601470/torch/hub/checkpoints/mit_b3.pth",
+        encoder_weights_path=None,
+        ignore_index=None,
     ):
         super().__init__()
 
@@ -33,53 +37,65 @@ class SegmentationModel(pl.LightningModule):
             classes=num_classes,
         )
 
-        # Load ImageNet-pretrained encoder weights locally.
-        # This avoids downloading weights on the compute node.
-        state_dict = torch.load(
-            encoder_weights_path,
-            map_location="cpu",
-            weights_only=True,
-        )
+        # ---------------------------------------------------------
+        # Optional local encoder weights
+        # ---------------------------------------------------------
+        if encoder_weights_path is not None:
+            state_dict = torch.load(
+                encoder_weights_path,
+                map_location="cpu",
+                weights_only=True,
+            )
 
-        self.model.encoder.load_state_dict(state_dict)
+            self.model.encoder.load_state_dict(state_dict)
 
-        # Freeze encoder, equivalent to the old "strategy: freeze".
-        for param in self.model.encoder.parameters():
-            param.requires_grad = False
+        # ---------------------------------------------------------
+        # Strategy
+        # ---------------------------------------------------------
+        
+        if self.hparams.strategy == "freeze":
+            for param in self.model.encoder.parameters():
+                param.requires_grad = False
+
+        elif self.hparams.strategy in ["finetune", "scratch"]:
+            for param in self.model.encoder.parameters():
+                param.requires_grad = True
+
+        else:
+            raise ValueError(f"Unknown strategy: {self.hparams.strategy}")
 
         # ---------------------------------------------------------
         # Loss
         # ---------------------------------------------------------
-        weights = torch.tensor(
-            class_weights,
-            dtype=torch.float32,
+        if class_weights is not None:
+            weights = torch.tensor(class_weights, dtype=torch.float32)
+            weights = weights / weights.sum()
+        else:
+            weights = None
+
+        self.loss_fn = CrossEntropyLoss(
+            weight=weights,
+            ignore_index=ignore_index if ignore_index is not None else -100,
         )
 
-        # Preserve the weighting behaviour of the previous script.
-        weights = weights / weights.sum()
-
-        self.loss_fn = CrossEntropyLoss(weight=weights)
-
         # ---------------------------------------------------------
-        # Validation metrics
+        # Metrics
         # ---------------------------------------------------------
-
-        # Overall IoU, ignoring background.
         self.val_iou = MulticlassJaccardIndex(
             num_classes=num_classes,
-            ignore_index=0,
+            ignore_index=ignore_index,
         )
 
-        # Per-class IoU.
         self.val_class_iou = MulticlassJaccardIndex(
             num_classes=num_classes,
             average="none",
+            ignore_index=ignore_index,
         )
 
-        # Per-class F1.
         self.val_class_f1 = MulticlassF1Score(
             num_classes=num_classes,
             average="none",
+            ignore_index=ignore_index,
         )
 
     def forward(self, x):
@@ -111,7 +127,6 @@ class SegmentationModel(pl.LightningModule):
 
         predictions = torch.argmax(logits, dim=1)
 
-        # Update TorchMetrics.
         self.val_iou.update(predictions, masks)
         self.val_class_iou.update(predictions, masks)
         self.val_class_f1.update(predictions, masks)
@@ -129,75 +144,42 @@ class SegmentationModel(pl.LightningModule):
         return loss
 
     def on_validation_epoch_end(self):
-        # Compute metrics accumulated over the entire validation set.
         iou = self.val_iou.compute()
         class_iou = self.val_class_iou.compute()
         class_f1 = self.val_class_f1.compute()
 
-        # Overall IoU.
         self.log(
             "IoU",
             iou,
-            on_step=False,
-            on_epoch=True,
             prog_bar=True,
             logger=True,
         )
 
-        # Class-specific IoU.
-        self.log(
-            "Leaf_Damage_IoU",
-            class_iou[2],
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-        )
+        # Log all classes automatically
 
-        self.log(
-            "insect_damage_IoU",
-            class_iou[3],
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-        )
+        for class_name in self.hparams.metric_classes:
+            class_idx = self.hparams.class_names.index(class_name)
 
-        self.log(
-            "Powdery_Mildew_IoU",
-            class_iou[4],
-            on_step=False,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-        )
+            self.log(
+                f"{class_name}_IoU",
+                class_iou[class_idx],
+                on_step=False,
+                on_epoch=True,
+                prog_bar=True,
+                logger=True,
+            )
 
-        # Class-specific F1.
-        self.log(
-            "Leaf_Damage_F1",
-            class_f1[2],
-            on_step=False,
-            on_epoch=True,
-            logger=True,
-        )
-
-        self.log(
-            "insect_damage_F1",
-            class_f1[3],
-            on_step=False,
-            on_epoch=True,
-            logger=True,
-        )
-
-        self.log(
-            "Powdery_Mildew_F1",
-            class_f1[4],
-            on_step=False,
-            on_epoch=True,
-            logger=True,
-        )
+            self.log(
+                f"{class_name}_F1",
+                class_f1[class_idx],
+                on_step=False,
+                on_epoch=True,
+                prog_bar=True,
+                logger=True,
+            )
 
     def configure_optimizers(self):
+
         optimizer = torch.optim.Adam(
             (
                 parameter

@@ -1,0 +1,9 @@
+dataset_name: Focus
+
+train:
+  data: /scratch0/f89601470/Focus/train/data
+  labels: /scratch0/f89601470/Focus/train/labels
+
+val:
+  data: /scratch0/f89601470/Focus/val/data
+  labels: /scratch0/f89601470/Focus/val/labels

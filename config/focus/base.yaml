@@ -1,0 +1,11 @@
+add_predictions: False
+run_name: base
+
+defaults:
+  - model: base
+  - optimization: base
+  - data_augmentation: base
+  - hydra: base
+  - dataset: base
+
+repeats: 0

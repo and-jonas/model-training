@@ -1,0 +1,9 @@
+
+sweeper:
+  params:
+    run_name: downscaling
+    # repeats: 0,1,2,3,4,5
+    # model.backbone: mit_b2, mit_b1, mit_b0
+    optimization.learning_rate: 1e-2, 1e-3, 1e-4
+    data_augmentation: base, downscaling_half, downscaling_quarter
+

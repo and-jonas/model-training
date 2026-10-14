@@ -1,0 +1,3 @@
+sweeper:
+  params:
+    dataset.dataset_name: stb_seg_v5-r1, stb_seg_v1-r1

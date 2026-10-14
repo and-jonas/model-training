@@ -1,0 +1,3 @@
+defaults:
+  - experiment: date_logo
+  - _self_

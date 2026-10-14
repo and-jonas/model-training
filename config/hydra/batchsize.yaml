@@ -1,0 +1,6 @@
+sweeper:
+  params:
+    repeats: 0,1,2,3,4,5
+    optimization.learning_rate: 1e-2, 1e-3, 1e-4
+    optimization.batchsize: 2, 4, 8, 16, 32, 64
+

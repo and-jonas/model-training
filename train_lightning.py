@@ -18,11 +18,12 @@ from transforms_pytorch import (
 from lightning_model import SegmentationModel
 
 # task-specific configuration
-task = "focus"
+task = "symptoms"
 OPTIMIZATION_CONFIG_PATH = f"config/{task}/optimization/base.yaml"
 MODEL_CONFIG_PATH = f"config/{task}/model/base.yaml"
 AUGMENTATION_CONFIG_PATH = f"config/{task}/data_augmentation/base.yaml"
-DATASET_CONFIG_PATH = f"config/{task}/dataset/base.yaml"
+DATASET_CONFIG_PATH = f"config/{task}/dataset/v2.yaml"
+
 optimization_cfg = OmegaConf.load(OPTIMIZATION_CONFIG_PATH)
 model_cfg = OmegaConf.load(MODEL_CONFIG_PATH)
 augmentation_cfg = OmegaConf.load(AUGMENTATION_CONFIG_PATH)

@@ -1,0 +1,21 @@
+optimizer: 
+  name: adam
+  
+epochs: 3
+device: 0
+learning_rate: 1e-3
+weight_decay: 0
+strategy: freeze
+n_workers: 0
+
+batch_size: 8
+accumulate_grad_batches: 1
+
+class_weights: [1, 1, 1, 1, 1]
+
+early_stopping:
+  enabled: false
+  monitor: Leaf_Damage_F1
+  mode: max
+  patience: 7
+  min_delta: 0.01

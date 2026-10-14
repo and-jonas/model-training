@@ -1,0 +1,20 @@
+# @package _global_
+
+defaults:
+  - /model: base
+  - /optimization: performance_evaluation
+  - /data_augmentation: base
+  - /dataset: iter2
+  - _self_
+
+task: symptoms
+run_name: date_logo
+seed: 42
+
+splits:
+  path: date_splits.csv
+  folds: all
+
+add_predictions: false
+
+fold: null

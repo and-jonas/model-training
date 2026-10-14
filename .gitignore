@@ -4,4 +4,4 @@
 /models
 __pycache__/
 /.venv
-
+/outputs

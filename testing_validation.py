@@ -22,7 +22,7 @@ from lightning_model import SegmentationModel
 import pandas as pd
 
 
-def run_fold(fold, cfg, metadata, splits, output_dir):
+def run_fold(fold, cfg, splits, output_dir):
 
     # Access configurations
     dataset_cfg = cfg.dataset
@@ -30,48 +30,51 @@ def run_fold(fold, cfg, metadata, splits, output_dir):
     optimization_cfg = cfg.optimization
     augmentation_cfg = cfg.data_augmentation
 
-    pl.seed_everything(int(cfg.seed) + int(fold), workers=True)
+    # pl.seed_everything(int(cfg.seed) + int(fold), workers=True)
+    pl.seed_everything(int(cfg.seed), workers=True)
 
-    fold_dir = output_dir / f"fold_{fold}"
+    # Output directory
+    fold_dir = (
+        output_dir
+        / str(dataset_cfg.dataset_name)
+        / str(model_cfg.backbone)
+        / f"seed_{cfg.seed}"
+        / f"fold_{fold}"
+    )
     fold_dir.mkdir(parents=True, exist_ok=True)
 
-    fold_splits = splits.loc[ splits["fold"] == fold].copy()
-
-    train_ids = set(fold_splits.loc[fold_splits["split"] == "train", "sample_UID"])
-    val_ids = set(fold_splits.loc[fold_splits["split"] == "validation", "sample_UID"])
-
-    assert not train_ids & val_ids
-    assert train_ids and val_ids
-
-    # get metadata for training and validation samples
-    fold_metadata = metadata.merge(
-        fold_splits[["sample_UID", "split"]],
-        on="sample_UID",
-        how="inner",
-        validate="one_to_one",
-    )
-    train_metadata = fold_metadata.loc[fold_metadata["split"] == "train"].copy()
-    val_metadata = fold_metadata.loc[fold_metadata["split"] == "validation"].copy()
-
-    print(f"\nFold {fold}")
-    print(f"Training images: {len(train_metadata)}")
-    print(f"Validation images: {len(val_metadata)}")
-
-        # Datasets
+    # Datasets
     train_transform = build_train_transform(augmentation_cfg)
     val_transform = build_val_transform(augmentation_cfg)
-    train_dataset = SegmentationDataset(
-        data_dir=dataset_cfg.data,
-        labels_dir=dataset_cfg.labels,
-        transform=train_transform,
-        sample_ids=train_ids,
-    )
-    val_dataset = SegmentationDataset(
-        data_dir=dataset_cfg.data,
-        labels_dir=dataset_cfg.labels,
-        transform=val_transform,
-        sample_ids=val_ids,
-    )
+    if "train" in dataset_cfg and "val" in dataset_cfg:
+        train_dataset = SegmentationDataset(
+            data_dir=dataset_cfg.train.data,
+            labels_dir=dataset_cfg.train.labels,
+            transform=train_transform,
+        )
+        val_dataset = SegmentationDataset(
+            data_dir=dataset_cfg.val.data,
+            labels_dir=dataset_cfg.val.labels,
+            transform=val_transform,
+        )
+    else:
+        fold_splits = splits.loc[ splits["fold"] == fold].copy()
+        train_ids = set(fold_splits.loc[fold_splits["split"] == "train", "sample_UID"])
+        val_ids = set(fold_splits.loc[fold_splits["split"] == "validation", "sample_UID"])
+        assert not train_ids & val_ids
+        assert train_ids and val_ids
+        train_dataset = SegmentationDataset(
+            data_dir=dataset_cfg.data,
+            labels_dir=dataset_cfg.labels,
+            transform=train_transform,
+            sample_ids=train_ids,
+        )
+        val_dataset = SegmentationDataset(
+            data_dir=dataset_cfg.data,
+            labels_dir=dataset_cfg.labels,
+            transform=val_transform,
+            sample_ids=val_ids,
+        )
 
     # DataLoaders
     train_loader = DataLoader(
@@ -102,27 +105,19 @@ def run_fold(fold, cfg, metadata, splits, output_dir):
         encoder_weights_path=model_cfg.encoder_weights_path,
     )
 
-    # Parameter summary
-    trainable_parameters = sum(
-        parameter.numel()
-        for parameter in model.parameters()
-        if parameter.requires_grad
-    )
-    total_parameters = sum(
-        parameter.numel()
-        for parameter in model.parameters()
-    )
-    print("\nModel")
-    print("-----")
-    print(f"Total parameters:     {total_parameters:,}")
-    print(f"Trainable parameters: {trainable_parameters:,}")
-
     # TensorBoard
-    logger = TensorBoardLogger(
-        save_dir=str(output_dir),
-        name=f"fold_{fold}",
-        version="logs",
-    )
+    logger = TensorBoardLogger(save_dir=str(fold_dir), name="")
+
+    # save config
+    run_dir = Path(logger.log_dir)
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    # skip existing
+    if (run_dir / "results.csv").exists():
+        print(f"Already completed: {run_dir}")
+        return
+
+    OmegaConf.save(cfg, run_dir / "config.yaml", resolve=True)
 
     # Callbacks
     lr_monitor = LearningRateMonitor(
@@ -131,10 +126,10 @@ def run_fold(fold, cfg, metadata, splits, output_dir):
     checkpoint = ModelCheckpoint(
         dirpath=Path(logger.log_dir) / "checkpoints",
         filename="epoch{epoch:02d}-valIoU{IoU:.4f}",
-        monitor="IoU",
+        monitor="val_f1",
         mode="max",
         save_top_k=0,
-        save_last=True,
+        save_last=False,
     )
     callbacks = [lr_monitor, checkpoint]
     if optimization_cfg.early_stopping.enabled:
@@ -146,7 +141,11 @@ def run_fold(fold, cfg, metadata, splits, output_dir):
         )
         callbacks.append(early_stopping)
 
-    # train
+    # Verify dataset sizes
+    print(f"Train: {len(train_dataset)}")
+    print(f"Validation: {len(val_dataset)}")
+
+    # train and monitor on the held-out fold
     trainer = pl.Trainer(
         max_epochs=int(optimization_cfg.epochs),
         accelerator="gpu",
@@ -157,6 +156,7 @@ def run_fold(fold, cfg, metadata, splits, output_dir):
         callbacks=callbacks,
         log_every_n_steps=10,
         enable_checkpointing=True,
+        num_sanity_val_steps=0
     )
     trainer.fit(
         model,
@@ -164,7 +164,7 @@ def run_fold(fold, cfg, metadata, splits, output_dir):
         val_dataloaders=val_loader,
     )
 
-    # Evaluate on the held-out fold
+    # Evaluate final model on the held-out fold
     fold_metrics = trainer.validate(
         model,
         dataloaders=val_loader,
@@ -174,6 +174,9 @@ def run_fold(fold, cfg, metadata, splits, output_dir):
     result = {
         "experiment": cfg.run_name,
         "fold": int(fold),
+        "seed": int(cfg.seed),
+        "backbone": str(model_cfg.backbone),
+        "dataset": str(dataset_cfg.dataset_name), 
         "n_train": len(train_dataset),
         "n_val": len(val_dataset),
         "epochs": int(optimization_cfg.epochs),
@@ -182,10 +185,8 @@ def run_fold(fold, cfg, metadata, splits, output_dir):
             for key, value in fold_metrics.items()
         },
     }
-
-    pd.DataFrame([result]).to_csv(fold_dir / "results.csv", index=False)
-
-    OmegaConf.save(cfg, fold_dir / "config.yaml", resolve=True)
+    pd.DataFrame([result]).to_csv(run_dir / "results.csv", index=False)
+    print(f"\nResults saved to: {run_dir / 'results.csv'}")
 
     return result
 
@@ -193,57 +194,58 @@ def run_fold(fold, cfg, metadata, splits, output_dir):
 @hydra.main(
         version_base=None, 
         config_path="config", 
-        config_name="config"
+        config_name="experiment/architecture_comparison"
     )
 def main(cfg: DictConfig):
 
-    print(OmegaConf.to_yaml(cfg))
+    # print(OmegaConf.to_yaml(cfg))
 
     task = cfg.task
     experiment = cfg.run_name
-
-    # Access configurations
-    dataset_cfg = cfg.dataset
-    splits_cfg = cfg.splits
 
     # make output directory
     output_dir = Path("experiments") / task / experiment
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # get samples and their metadata for one fold of an experiment
-    metadata = pd.read_csv(Path(dataset_cfg.meta) / "04_sample_metadata_uids_design_alliters.csv", dtype={"plot": "Int64"})
-    splits = pd.read_csv(splits_cfg.path)
-
-    # get training and validation sample_UIDs
-    splits = splits.loc[(splits["experiment"] == experiment)].copy()
-
-    if splits.empty:
-        raise ValueError(f"No splits found for {cfg.splits.experiment}")
-
-    # Determine which folds to run
-    available_folds = sorted(splits["fold"].unique())
-
-    if cfg.splits.folds == "all":
-        folds = available_folds
+    if "train" in cfg.dataset and "val" in cfg.dataset:
+        splits = None
+        folds = [0]
+        if cfg.fold is not None and int(cfg.fold) != 0:
+            raise ValueError(
+                "Predefined train/validation datasets only support fold 0"
+            )
     else:
-        folds = list(cfg.splits.folds)
+        # get training and validation sample_UIDs
+        splits = pd.read_csv(cfg.splits.path, dtype={"sample_UID": str})
+        splits = splits.loc[(splits["experiment"] == experiment)].copy()
+        if splits.empty:
+            raise ValueError(f"No splits found for {cfg.splits.experiment}")
 
-    # Optional: select one fold via command line
-    if cfg.fold is not None:
-        folds = [int(cfg.fold)]
+        # Determine which folds to run
+        available_folds = sorted(splits["fold"].unique())
+        if cfg.splits.folds == "all":
+            folds = available_folds
+        else:
+            folds = list(cfg.splits.folds)
 
-    if not set(folds).issubset(set(available_folds)):
-        raise ValueError(
-            f"Requested folds {folds} not found. "
-            f"Available folds: {available_folds}"
-        )
+        # Optional: select one fold via command line
+        if cfg.fold is not None:
+            folds = [int(cfg.fold)]
+
+        if not set(folds).issubset(set(available_folds)):
+            raise ValueError(
+                f"Requested folds {folds} not found. "
+                f"Available folds: {available_folds}"
+            )
 
     print(f"Experiment: {experiment}")
+    print(f"Dataset: {cfg.dataset.dataset_name}")
     print(f"Folds to run: {folds}")
 
     # perform evaluation using the pre-defined resampling procedure
     for fold in folds:
-        run_fold(fold=fold, cfg=cfg, metadata=metadata, splits=splits, output_dir=output_dir)
+        run_fold(fold=fold, cfg=cfg, splits=splits, output_dir=output_dir)
 
 
 if __name__ == "__main__":

@@ -17,12 +17,15 @@ from transforms_pytorch import (
 )
 from lightning_model import SegmentationModel
 
+
+pl.seed_everything(42, workers=True)
+
 # task-specific configuration
 task = "symptoms"
 OPTIMIZATION_CONFIG_PATH = f"config/{task}/optimization/base.yaml"
 MODEL_CONFIG_PATH = f"config/{task}/model/base.yaml"
 AUGMENTATION_CONFIG_PATH = f"config/{task}/data_augmentation/base.yaml"
-DATASET_CONFIG_PATH = f"config/{task}/dataset/v2.yaml"
+DATASET_CONFIG_PATH = f"config/{task}/dataset/base.yaml"
 
 optimization_cfg = OmegaConf.load(OPTIMIZATION_CONFIG_PATH)
 model_cfg = OmegaConf.load(MODEL_CONFIG_PATH)
@@ -114,6 +117,18 @@ if optimization_cfg.early_stopping.enabled:
         min_delta=optimization_cfg.early_stopping.min_delta,
     )
     callbacks.append(early_stopping)
+
+# Verify dataset sizes
+print(f"Train: {len(train_dataset)}")
+print(f"Validation: {len(val_dataset)}")
+
+# Verify model configuration
+print("Backbone:", model_cfg.backbone)
+print("Encoder weights:", model_cfg.encoder_weights_path)
+print("Strategy:", optimization_cfg.strategy)
+print("Learning rate:", optimization_cfg.learning_rate)
+print("Class weights:", optimization_cfg.class_weights)
+print("Batch size:", optimization_cfg.batch_size)
 
 # train
 trainer = pl.Trainer(

@@ -1,0 +1,14 @@
+dataset_name: iter1_v1
+
+data: /scratch0/f89601470/Symptoms/iter1/v1/data
+labels: /scratch0/f89601470/Symptoms/iter1/v1/labels
+
+# dataset_name: ZenklEtAl2026
+
+# train:
+#   data: /scratch0/f89601470/ZenklEtAl2026/train/data
+#   labels: /scratch0/f89601470/ZenklEtAl2026/train/labels
+
+# val:
+#   data: /scratch0/f89601470/ZenklEtAl2026/val/data
+#   labels: /scratch0/f89601470/ZenklEtAl2026/val/labels

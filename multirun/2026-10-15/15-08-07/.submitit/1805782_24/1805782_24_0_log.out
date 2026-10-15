@@ -1,0 +1,2 @@
+submitit INFO (2026-10-15 17:04:57,704) - Starting with JobEnvironment(job_id=1805782_24, hostname=ags-sch-3062, local_rank=0(1), node=0(1), global_rank=0(1))
+submitit INFO (2026-10-15 17:04:57,704) - Loading pickle: /home/f89601470/model-training/multirun/2026-10-15/15-08-07/.submitit/1805782_24/1805782_24_submitted.pkl

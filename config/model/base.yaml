@@ -14,4 +14,4 @@ metric_classes:
   - Powdery_Mildew
 
 encoder_weights: null
-encoder_weights_path: /scratch0/f89601470/torch/hub/checkpoints/mit_b3.pth
+encoder_weights_path: /scratch0/f89601470/torch/hub/checkpoints/${model.backbone}.pth

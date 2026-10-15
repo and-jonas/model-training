@@ -98,6 +98,12 @@ class SegmentationModel(pl.LightningModule):
             ignore_index=ignore_index,
         )
 
+        self.val_f1 = MulticlassF1Score(
+            num_classes=num_classes,
+            average="macro",
+            ignore_index=ignore_index,
+        )
+
     def forward(self, x):
         return self.model(x)
 
@@ -130,6 +136,7 @@ class SegmentationModel(pl.LightningModule):
         self.val_iou.update(predictions, masks)
         self.val_class_iou.update(predictions, masks)
         self.val_class_f1.update(predictions, masks)
+        self.val_f1.update(predictions, masks)
 
         self.log(
             "val_loss",
@@ -147,6 +154,7 @@ class SegmentationModel(pl.LightningModule):
         iou = self.val_iou.compute()
         class_iou = self.val_class_iou.compute()
         class_f1 = self.val_class_f1.compute()
+        overall_f1 = self.val_f1.compute()
 
         self.log(
             "IoU",
@@ -154,6 +162,14 @@ class SegmentationModel(pl.LightningModule):
             prog_bar=True,
             logger=True,
         )
+
+        self.log(
+            "val_f1",
+            overall_f1,
+            prog_bar=True,
+            on_epoch=True,
+        )
+        self.val_f1.reset()
 
         # Log all classes automatically
 
